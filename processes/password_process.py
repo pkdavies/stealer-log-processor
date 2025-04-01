@@ -1,6 +1,8 @@
 import os
+import re
+import concurrent.futures
 
-def process_passwords_in_folder(root_folder, password_file_name, verbose=False):
+def process_passwords_in_folder(root_folder, output_folder, password_file_name, verbose=False, max_workers=None):
     print(f"Processing passwords in folder: {root_folder}")
 
     # Initialize list to store paths of output files in subfolders
@@ -8,39 +10,92 @@ def process_passwords_in_folder(root_folder, password_file_name, verbose=False):
 
     # Traverse through each subfolder
     subfolders = [f.path for f in os.scandir(root_folder) if f.is_dir()]
-    for subfolder in subfolders:
-        output_file_path = process_passwords_in_subfolder(subfolder, password_file_name, verbose)
-        output_files.append(output_file_path)
+    
+    # Process subfolders in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Map subfolder processing to executor
+        future_to_subfolder = {
+            executor.submit(process_passwords_in_subfolder, subfolder, output_folder, password_file_name, verbose): subfolder
+            for subfolder in subfolders
+        }
+        
+        # Collect results as they complete
+        for future in concurrent.futures.as_completed(future_to_subfolder):
+            subfolder = future_to_subfolder[future]
+            try:
+                output_file_path = future.result()
+                if output_file_path:
+                    output_files.append(output_file_path)
+                    if verbose:
+                        print(f"Completed processing subfolder: {subfolder}")
+            except Exception as e:
+                print(f"Error processing subfolder {subfolder}: {str(e)}")
 
-    # Combine all output files into one at root_folder level
-    combine_password_files(output_files, root_folder, password_file_name, verbose)
+    # Combine all output files into one at output_folder level
+    combine_password_files(output_files, output_folder, password_file_name, verbose)
 
-def process_passwords_in_subfolder(subfolder, password_file_name, verbose=False):
+def process_passwords_in_subfolder(subfolder, output_folder, password_file_name, verbose=False):
     
     if verbose:
         print(f"\tsubfolder: {subfolder}")
 
     # Initialize list to store credentials
     credentials = []
-
-    # Traverse through files in subfolder
+    
+    # Find all password files
+    password_files = []
     for root, _, files in os.walk(subfolder):
         for file_name in files:
             # Check if the file has a valid extension
             if file_name.lower().endswith(('.csv', '.tsv', '.txt')) and 'password' in file_name.lower():
-                process_password_files(os.path.join(root, file_name), credentials, verbose)
+                password_files.append(os.path.join(root, file_name))
+    
+    # Process files in parallel
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Create a shared list to collect credentials
+        shared_credentials = []
+        
+        # Process each file in parallel
+        futures = []
+        for file_path in password_files:
+            future = executor.submit(process_password_files, file_path, verbose)
+            futures.append(future)
+        
+        # Collect results
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                file_credentials = future.result()
+                if file_credentials:
+                    shared_credentials.extend(file_credentials)
+            except Exception as e:
+                if verbose:
+                    print(f"Error processing file: {str(e)}")
+        
+        # Combine all credentials
+        credentials.extend(shared_credentials)
 
-    # Write credentials to the output file in subfolder
-    output_file_path = os.path.join(subfolder, password_file_name)
+    # Skip if no credentials found
+    if not credentials:
+        return None
+
+    # Create temp folder in output location for temporary files
+    subfolder_name = os.path.basename(subfolder)
+    temp_folder = os.path.join(output_folder, 'temp')
+    os.makedirs(temp_folder, exist_ok=True)
+    
+    # Write credentials to the output file in temp folder
+    output_file_path = os.path.join(temp_folder, f"{subfolder_name}_{password_file_name}")
     with open(output_file_path, 'w', encoding='utf-8') as out_file:
         for credential in credentials:
             out_file.write(','.join(credential) + '\n')
 
     return output_file_path
 
-def process_password_files(file_path, credentials, verbose=False):
+def process_password_files(file_path, verbose=False):
     if verbose:
         print(f"Processing {file_path}")
+    
+    file_credentials = []
     password_info = {'URL': '', 'USER': '', 'PASS': ''}
     expected_next = 'URL'  # Start expecting a URL
 
@@ -67,7 +122,14 @@ def process_password_files(file_path, credentials, verbose=False):
                 if expected_next == 'URL' and 'url:' in line_lower:
                     parts = decoded_line.split(':', 1)
                     if len(parts) == 2:
-                        password_info['URL'] = parts[1].strip()
+                        # Fix for handling URLs with http: or https: properly
+                        url_value = parts[1].strip()
+                        # Check if the URL starts with http: or https: and fix accordingly
+                        if url_value.startswith(('http:', 'https:')):
+                            # Handle the URL as a complete entity
+                            password_info['URL'] = url_value
+                        else:
+                            password_info['URL'] = url_value
                         expected_next = 'USER'  # Next, expect User/Login
 
                 elif expected_next == 'USER' and ('user:' in line_lower or 'login:' in line_lower):
@@ -80,26 +142,46 @@ def process_password_files(file_path, credentials, verbose=False):
                     parts = decoded_line.split(':', 1)
                     if len(parts) == 2:
                         password_info['PASS'] = parts[1].strip()
-                        # After capturing Password, append the set to credentials and reset
-                        credentials.append((password_info['USER'], password_info['PASS'], password_info['URL']))
+                        # After capturing Password, ensure URL is properly formatted
+                        
+                        # Create a properly escaped credential
+                        # Escape URL part to ensure it's treated as a single field
+                        if password_info['USER'] and password_info['PASS'] and password_info['URL']:
+                            file_credentials.append((
+                                password_info['USER'], 
+                                password_info['PASS'], 
+                                f'"{password_info["URL"]}"' if ',' in password_info['URL'] else password_info['URL']
+                            ))
+                        
                         password_info = {'URL': '', 'USER': '', 'PASS': ''}  # Reset for next credential set
                         expected_next = 'URL'  # Start expecting a URL again for the next set
                         
+        return file_credentials
     except IOError as e:
         print(f"Error processing file {file_path}: {e}")
+        return []
 
-def combine_password_files(output_files, root_folder, output_file_name, verbose=False):
+def combine_password_files(output_files, output_folder, output_file_name, verbose=False):
+    if not output_files:
+        if verbose:
+            print("No credentials found to combine.")
+        return
+    
     if verbose:
         print(f"Combining credentials into {output_file_name}")
 
     combined_credentials = set()
     for output_file in output_files:
-        with open(output_file, 'r', encoding='utf-8') as file:
-            for line in file:
-                combined_credentials.add(line.strip())
+        try:
+            with open(output_file, 'r', encoding='utf-8') as file:
+                for line in file:
+                    combined_credentials.add(line.strip())
+        except Exception as e:
+            if verbose:
+                print(f"Error reading file {output_file}: {e}")
 
     # Write combined credentials to the target file
-    target_file_path = os.path.join(root_folder, output_file_name)
+    target_file_path = os.path.join(output_folder, output_file_name)
     try:
         with open(target_file_path, 'w', encoding='utf-8') as target_file:
             for credential in combined_credentials:
@@ -111,8 +193,19 @@ def combine_password_files(output_files, root_folder, output_file_name, verbose=
         if verbose:
             print(f"Error writing to file {target_file_path}: {e}")
     
-    # Clean up intermediate p_credentials.csv files from subfolders
+    # Clean up intermediate files
     for output_file in output_files:
+        try:
             os.remove(output_file)
-
+        except Exception as e:
+            if verbose:
+                print(f"Failed to remove temporary file {output_file}: {e}")
     
+    # Attempt to remove temp directory if it exists and is empty
+    temp_folder = os.path.join(output_folder, 'temp')
+    try:
+        if os.path.exists(temp_folder) and not os.listdir(temp_folder):
+            os.rmdir(temp_folder)
+    except Exception as e:
+        if verbose:
+            print(f"Failed to remove temp folder: {e}")
