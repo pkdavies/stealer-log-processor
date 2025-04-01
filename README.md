@@ -1,6 +1,6 @@
 # Stealer Log Processor
 
-> ⚠️ Originally authored by [bikemazzell](https://github.com/bikemazzell). Refactored for OpenSearch support and modularity by [Juicy Media Group](https://github.com/pkdavies).
+> ⚠️ Originally authored by [bikemazzell](https://github.com/bikemazzell). Refactored for OpenSearch support, muilt-processing and modularity.
 
 ---
 
