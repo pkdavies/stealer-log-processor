@@ -35,44 +35,30 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
     combine_password_files(output_files, output_folder, password_file_name, verbose)
 
 def process_passwords_in_subfolder(subfolder, output_folder, password_file_name, verbose=False):
-    
     if verbose:
         print(f"\tsubfolder: {subfolder}")
 
     # Initialize list to store credentials
     credentials = []
-    
-    # Find all password files
+
+    # Use os.scandir for faster directory traversal
     password_files = []
-    for root, _, files in os.walk(subfolder):
-        for file_name in files:
-            # Check if the file has a valid extension
-            if file_name.lower().endswith(('.csv', '.tsv', '.txt')) and 'password' in file_name.lower():
-                password_files.append(os.path.join(root, file_name))
-    
-    # Process files in parallel
+    with os.scandir(subfolder) as entries:
+        for entry in entries:
+            if entry.is_file() and entry.name.lower().endswith(('.csv', '.tsv', '.txt')) and 'password' in entry.name.lower():
+                password_files.append(entry.path)
+
+    # Reuse thread pool for file processing
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Create a shared list to collect credentials
-        shared_credentials = []
-        
-        # Process each file in parallel
-        futures = []
-        for file_path in password_files:
-            future = executor.submit(process_password_files, file_path, verbose)
-            futures.append(future)
-        
-        # Collect results
+        futures = [executor.submit(process_password_files, file_path, verbose) for file_path in password_files]
         for future in concurrent.futures.as_completed(futures):
             try:
                 file_credentials = future.result()
                 if file_credentials:
-                    shared_credentials.extend(file_credentials)
+                    credentials.extend(file_credentials)
             except Exception as e:
                 if verbose:
                     print(f"Error processing file: {str(e)}")
-        
-        # Combine all credentials
-        credentials.extend(shared_credentials)
 
     # Skip if no credentials found
     if not credentials:

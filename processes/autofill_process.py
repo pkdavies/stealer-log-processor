@@ -3,53 +3,35 @@ import concurrent.futures
 
 def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, verbose=False):
     print(f"Processing autofills in folder: {root_folder}")
-    
-    # Find all autofill files
+
+    # Use os.scandir for faster directory traversal
     autofill_files = []
-    for root, dirs, files in os.walk(root_folder):
-        autofill_directory = 'autofill' in os.path.basename(root).lower()
-        for file_name in files:
-            if (autofill_directory or 'autofill' in file_name.lower()) and file_name.lower().endswith(('.csv', '.tsv', '.txt')):
-                file_path = os.path.join(root, file_name)
-                autofill_files.append(file_path)
-    
-    # Process files in parallel
+    with os.scandir(root_folder) as entries:
+        for entry in entries:
+            if entry.is_file() and 'autofill' in entry.name.lower() and entry.name.lower().endswith(('.csv', '.tsv', '.txt')):
+                autofill_files.append(entry.path)
+
+    # Reuse thread pool for file processing
     output_files = []
-    seen_pairs = set()  # This will be synchronized using a lock
-    
+    seen_pairs = set()
     if not autofill_files:
         if verbose:
             print("No autofill files found.")
         return
-        
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Map each file to process_autofill_files
-        future_to_file = {}
-        for file_path in autofill_files:
-            future = executor.submit(process_autofill_files_parallel, file_path, verbose)
-            future_to_file[future] = file_path
-        
-        # Process results as they complete
-        for future in concurrent.futures.as_completed(future_to_file):
-            file_path = future_to_file[future]
+        futures = [executor.submit(process_autofill_files_parallel, file_path, verbose) for file_path in autofill_files]
+        for future in concurrent.futures.as_completed(futures):
             try:
                 form_value_pairs = future.result()
                 if form_value_pairs:
-                    # Filter out duplicates
-                    unique_pairs = []
-                    for pair in form_value_pairs:
-                        if pair not in seen_pairs:
-                            seen_pairs.add(pair)
-                            unique_pairs.append(pair)
-                            
-                    if unique_pairs:
-                        autofills_output = ','.join(unique_pairs)
-                        output_files.append(autofills_output)
-                        
+                    unique_pairs = [pair for pair in form_value_pairs if pair not in seen_pairs]
+                    seen_pairs.update(unique_pairs)
+                    output_files.extend(unique_pairs)
             except Exception as e:
                 if verbose:
-                    print(f"Error processing file {file_path}: {str(e)}")
-    
+                    print(f"Error processing file: {str(e)}")
+
     combine_autofill_files(output_files, output_folder, autofill_file_name, verbose)
 
 # New function for parallel processing that doesn't use shared seen_pairs
