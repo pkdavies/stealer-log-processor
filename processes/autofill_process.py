@@ -103,7 +103,12 @@ def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbos
     try:
         # Write autofill data to a CSV file
         with open(target_file_path, 'w', encoding='utf-8', newline='') as target_file:
-            csv_writer = csv.DictWriter(target_file, fieldnames=["key", "value", "source_file", "timestamp"])
+            csv_writer = csv.DictWriter(
+                target_file, 
+                fieldnames=["key", "value", "source_file", "timestamp"],
+                quoting=csv.QUOTE_MINIMAL,  # Enable quoting for special characters
+                escapechar='\\'  # Escape special characters
+            )
             csv_writer.writeheader()
             for entry in autofill_data:
                 csv_writer.writerow({
