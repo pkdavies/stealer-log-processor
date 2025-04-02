@@ -7,13 +7,21 @@ from processes.password_process import process_passwords_in_folder
 from processes.autofill_process import process_autofills_in_folder
 
 def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearch=False):
-    # Create output folder if it doesn't exist
+    """
+    Main function to process stealer logs.
+
+    Args:
+        root_folder (str): Path to the root folder containing log files.
+        output_folder (str): Path to the folder where output files will be saved.
+        verbose (bool): Enable verbose logging.
+        max_workers (int): Maximum number of worker processes.
+        enable_opensearch (bool): Whether to send data to OpenSearch.
+    """
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     start_time = time.time()
 
-    # Use a shared ProcessPoolExecutor for both tasks
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [
             executor.submit(process_passwords_in_folder, root_folder, output_folder, 'credentials.csv', verbose, enable_opensearch),
@@ -46,7 +54,5 @@ if __name__ == "__main__":
         print(f"Error: {args.root_folder} is not a valid directory.")
         sys.exit(1)
 
-    # Default output to ./output if not specified
     output_folder = args.output
-
     main(args.root_folder, output_folder, args.verbose, args.workers, args.enable_opensearch)
