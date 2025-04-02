@@ -3,7 +3,7 @@ version: '3.8'
 services:
   opensearch:
     image: opensearchproject/opensearch:2.9.0
-    container_name: opensearch
+    container_name: stealerlogs-opensearch
     environment:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
@@ -19,7 +19,7 @@ services:
 
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:2.9.0
-    container_name: opensearch-dashboards
+    container_name: stealerlogs-opensearch-dashboards
     environment:
       - OPENSEARCH_HOSTS=http://opensearch:9200
     ports:
@@ -27,7 +27,7 @@ services:
     networks:
       - opensearch-net
     depends_on:
-      - opensearch
+      - stealerlogs-opensearch
 
 networks:
   opensearch-net:
