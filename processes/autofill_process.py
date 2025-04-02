@@ -30,6 +30,7 @@ def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, 
             print("No autofill files found.")
         return
 
+    # Use ThreadPoolExecutor for I/O-bound tasks
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(process_autofill_files_parallel, file_path, verbose) for file_path in autofill_files]
         for future in concurrent.futures.as_completed(futures):
@@ -113,10 +114,11 @@ def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbos
     target_file_path = os.path.join(output_folder, autofill_file_name)
 
     try:
+        # Add 'type' to the fieldnames to match the dictionary keys
         with open(target_file_path, 'w', encoding='utf-8', newline='') as target_file:
             csv_writer = csv.DictWriter(
                 target_file, 
-                fieldnames=["key", "value", "source_file", "timestamp"],
+                fieldnames=["key", "value", "source_file", "timestamp", "type"],  # Include 'type'
                 quoting=csv.QUOTE_MINIMAL,
                 escapechar='\\'
             )

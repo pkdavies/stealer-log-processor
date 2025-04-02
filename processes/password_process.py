@@ -13,7 +13,7 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
         output_folder (str): Path to the folder where output files will be saved.
         password_file_name (str): Name of the output file for combined credentials.
         verbose (bool): Enable verbose logging.
-        max_workers (int): Maximum number of threads for parallel processing.
+        max_workers (int): Maximum number of processes for parallel processing.
         enable_opensearch (bool): Whether to send data to OpenSearch.
     """
     print(f"Processing passwords in folder: {root_folder}")
@@ -21,7 +21,8 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
     subfolders = [f.path for f in os.scandir(root_folder) if f.is_dir()]
     output_files = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    # Use ProcessPoolExecutor for CPU-bound tasks
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_subfolder = {
             executor.submit(process_passwords_in_subfolder, subfolder, output_folder, password_file_name, verbose, enable_opensearch): subfolder
             for subfolder in subfolders
@@ -63,6 +64,7 @@ def process_passwords_in_subfolder(subfolder, output_folder, password_file_name,
     ]
 
     credentials = []
+    # Use ThreadPoolExecutor for I/O-bound tasks
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(process_password_files, file_path, verbose) for file_path in password_files]
         for future in concurrent.futures.as_completed(futures):
