@@ -146,7 +146,7 @@ def process_password_files(file_path, verbose=False):
                                 "password": password_info['PASS'],
                                 "source_file": os.path.basename(file_path),
                                 "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                                "type": "password"
+                                "type": "password"  # Add the "type" field
                             })
                         password_info = {'URL': '', 'USER': '', 'PASS': ''}
                         expected_next = 'URL'
