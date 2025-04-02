@@ -6,7 +6,7 @@ import concurrent.futures
 from processes.password_process import process_passwords_in_folder
 from processes.autofill_process import process_autofills_in_folder
 
-def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearch=False):
+def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearch=False, save_csv=True):
     """
     Main function to process stealer logs.
 
@@ -16,6 +16,7 @@ def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearc
         verbose (bool): Enable verbose logging.
         max_workers (int): Maximum number of worker processes.
         enable_opensearch (bool): Whether to send data to OpenSearch.
+        save_csv (bool): Whether to save extracted data to CSV files.
     """
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -24,8 +25,8 @@ def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearc
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(process_passwords_in_folder, root_folder, output_folder, 'credentials.csv', verbose, enable_opensearch),
-            executor.submit(process_autofills_in_folder, root_folder, output_folder, 'autofills.csv', verbose, enable_opensearch)
+            executor.submit(process_passwords_in_folder, root_folder, output_folder, 'credentials.csv', verbose, enable_opensearch, save_csv),
+            executor.submit(process_autofills_in_folder, root_folder, output_folder, 'autofills.csv', verbose, enable_opensearch, save_csv)
         ]
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -48,6 +49,8 @@ if __name__ == "__main__":
                         help='Maximum number of worker processes. Default is CPU count.')
     parser.add_argument('--enable-opensearch', action='store_true', 
                         help='Enable OpenSearch integration. Disabled by default.')
+    parser.add_argument('--disable-csv', action='store_true', 
+                        help='Disable saving extracted data to CSV files. Enabled by default.')
     args = parser.parse_args()
 
     if not os.path.isdir(args.root_folder):
@@ -55,4 +58,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     output_folder = args.output
-    main(args.root_folder, output_folder, args.verbose, args.workers, args.enable_opensearch)
+    save_csv = not args.disable_csv
+    main(args.root_folder, output_folder, args.verbose, args.workers, args.enable_opensearch, save_csv)

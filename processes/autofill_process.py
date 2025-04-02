@@ -4,7 +4,7 @@ from opensearch_client import OpenSearchClient
 import datetime
 import csv
 
-def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, verbose=False, enable_opensearch=False):
+def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, verbose=False, enable_opensearch=False, save_csv=True):
     """
     Process all subfolders in the root folder to extract autofill data.
 
@@ -14,6 +14,7 @@ def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, 
         autofill_file_name (str): Name of the output file for combined autofill data.
         verbose (bool): Enable verbose logging.
         enable_opensearch (bool): Whether to send data to OpenSearch.
+        save_csv (bool): Whether to save the data to a CSV file.
     """
     print(f"Processing autofills in folder: {root_folder}")
 
@@ -42,7 +43,7 @@ def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, 
                 if verbose:
                     print(f"Error processing file: {str(e)}")
 
-    write_autofill_data(autofill_data, output_folder, autofill_file_name, verbose)
+    write_autofill_data(autofill_data, output_folder, autofill_file_name, verbose, save_csv)
 
     if enable_opensearch:
         send_to_opensearch(autofill_data)
@@ -92,7 +93,7 @@ def process_autofill_files_parallel(file_path, verbose=False):
             print(f"Error processing file {file_path}: {e}")
         return []
 
-def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbose=False):
+def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbose=False, save_csv=True):
     """
     Write extracted autofill data to a CSV file.
 
@@ -101,10 +102,16 @@ def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbos
         output_folder (str): Path to the folder where the output file will be saved.
         autofill_file_name (str): Name of the output file.
         verbose (bool): Enable verbose logging.
+        save_csv (bool): Whether to save the data to a CSV file.
     """
     if not autofill_data:
         if verbose:
             print("No autofill data to write.")
+        return
+
+    if not save_csv:
+        if verbose:
+            print("CSV saving is disabled. Skipping writing autofill data.")
         return
 
     if verbose:
@@ -114,11 +121,10 @@ def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbos
     target_file_path = os.path.join(output_folder, autofill_file_name)
 
     try:
-        # Add 'type' to the fieldnames to match the dictionary keys
         with open(target_file_path, 'w', encoding='utf-8', newline='') as target_file:
             csv_writer = csv.DictWriter(
                 target_file, 
-                fieldnames=["key", "value", "source_file", "timestamp", "type"],  # Include 'type'
+                fieldnames=["key", "value", "source_file", "timestamp", "type"],
                 quoting=csv.QUOTE_MINIMAL,
                 escapechar='\\'
             )

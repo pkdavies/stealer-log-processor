@@ -4,7 +4,7 @@ import concurrent.futures
 import datetime
 from opensearch_client import OpenSearchClient
 
-def process_passwords_in_folder(root_folder, output_folder, password_file_name, verbose=False, max_workers=None, enable_opensearch=False):
+def process_passwords_in_folder(root_folder, output_folder, password_file_name, verbose=False, max_workers=None, enable_opensearch=False, save_csv=True):
     """
     Process all subfolders in the root folder to extract password data.
 
@@ -15,6 +15,7 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
         verbose (bool): Enable verbose logging.
         max_workers (int): Maximum number of processes for parallel processing.
         enable_opensearch (bool): Whether to send data to OpenSearch.
+        save_csv (bool): Whether to save extracted data to a CSV file.
     """
     print(f"Processing passwords in folder: {root_folder}")
 
@@ -24,7 +25,7 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
     # Use ProcessPoolExecutor for CPU-bound tasks
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_subfolder = {
-            executor.submit(process_passwords_in_subfolder, subfolder, output_folder, password_file_name, verbose, enable_opensearch): subfolder
+            executor.submit(process_passwords_in_subfolder, subfolder, output_folder, password_file_name, verbose, enable_opensearch, save_csv): subfolder
             for subfolder in subfolders
         }
 
@@ -39,9 +40,10 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
             except Exception as e:
                 print(f"Error processing subfolder {subfolder}: {str(e)}")
 
-    combine_password_files(output_files, output_folder, password_file_name, verbose)
+    if save_csv:
+        combine_password_files(output_files, output_folder, password_file_name, verbose)
 
-def process_passwords_in_subfolder(subfolder, output_folder, password_file_name, verbose=False, enable_opensearch=False):
+def process_passwords_in_subfolder(subfolder, output_folder, password_file_name, verbose=False, enable_opensearch=False, save_csv=True):
     """
     Process a single subfolder to extract password data.
 
@@ -51,9 +53,10 @@ def process_passwords_in_subfolder(subfolder, output_folder, password_file_name,
         password_file_name (str): Name of the output file for the subfolder.
         verbose (bool): Enable verbose logging.
         enable_opensearch (bool): Whether to send data to OpenSearch.
+        save_csv (bool): Whether to save extracted data to a CSV file.
 
     Returns:
-        str: Path to the output file for the subfolder.
+        str: Path to the output file for the subfolder, or None if no credentials found.
     """
     if verbose:
         print(f"\tProcessing subfolder: {subfolder}")
@@ -79,13 +82,16 @@ def process_passwords_in_subfolder(subfolder, output_folder, password_file_name,
     if not credentials:
         return None
 
-    temp_folder = os.path.join(output_folder, 'temp')
-    os.makedirs(temp_folder, exist_ok=True)
-    output_file_path = os.path.join(temp_folder, f"{os.path.basename(subfolder)}_{password_file_name}")
+    if save_csv:
+        temp_folder = os.path.join(output_folder, 'temp')
+        os.makedirs(temp_folder, exist_ok=True)
+        output_file_path = os.path.join(temp_folder, f"{os.path.basename(subfolder)}_{password_file_name}")
 
-    with open(output_file_path, 'w', encoding='utf-8') as out_file:
-        for credential in credentials:
-            out_file.write(','.join(credential.values()) + '\n')
+        with open(output_file_path, 'w', encoding='utf-8') as out_file:
+            for credential in credentials:
+                out_file.write(','.join(credential.values()) + '\n')
+    else:
+        output_file_path = None
 
     if enable_opensearch:
         send_to_opensearch(credentials)
