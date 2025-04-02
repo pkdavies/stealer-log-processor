@@ -1,6 +1,8 @@
 import os
 import re
 import concurrent.futures
+import datetime
+from opensearch_client import OpenSearchClient
 
 def process_passwords_in_folder(root_folder, output_folder, password_file_name, verbose=False, max_workers=None):
     print(f"Processing passwords in folder: {root_folder}")
@@ -73,7 +75,10 @@ def process_passwords_in_subfolder(subfolder, output_folder, password_file_name,
     output_file_path = os.path.join(temp_folder, f"{subfolder_name}_{password_file_name}")
     with open(output_file_path, 'w', encoding='utf-8') as out_file:
         for credential in credentials:
-            out_file.write(','.join(credential) + '\n')
+            out_file.write(','.join(credential.values()) + '\n')
+
+    # Send credentials to OpenSearch
+    send_to_opensearch(credentials)
 
     return output_file_path
 
@@ -95,30 +100,24 @@ def process_password_files(file_path, verbose=False):
                         print(f"Skipping undecodable line in file {file_path}")
                     continue
 
-                line_lower = decoded_line.lower() 
-                 # Skip lines that do not start with expected credential keys
+                line_lower = decoded_line.lower()
+                # Skip lines that do not start with expected credential keys
                 if not (line_lower.startswith('url:') or 
-                    line_lower.startswith('user:') or 
-                    line_lower.startswith('login:') or 
-                    line_lower.startswith('pass:') or 
-                    line_lower.startswith('password:')):
+                        line_lower.startswith('user:') or 
+                        line_lower.startswith('username:') or 
+                        line_lower.startswith('login:') or 
+                        line_lower.startswith('pass:') or 
+                        line_lower.startswith('password:')):
                     continue
 
-                 # Process line if it starts with expected info and matches the expected sequence
+                # Process line if it starts with expected info and matches the expected sequence
                 if expected_next == 'URL' and 'url:' in line_lower:
                     parts = decoded_line.split(':', 1)
                     if len(parts) == 2:
-                        # Fix for handling URLs with http: or https: properly
-                        url_value = parts[1].strip()
-                        # Check if the URL starts with http: or https: and fix accordingly
-                        if url_value.startswith(('http:', 'https:')):
-                            # Handle the URL as a complete entity
-                            password_info['URL'] = url_value
-                        else:
-                            password_info['URL'] = url_value
+                        password_info['URL'] = parts[1].strip()
                         expected_next = 'USER'  # Next, expect User/Login
 
-                elif expected_next == 'USER' and ('user:' in line_lower or 'login:' in line_lower):
+                elif expected_next == 'USER' and ('user:' in line_lower or 'username:' in line_lower or 'login:' in line_lower):
                     parts = decoded_line.split(':', 1)
                     if len(parts) == 2:
                         password_info['USER'] = parts[1].strip()
@@ -131,17 +130,18 @@ def process_password_files(file_path, verbose=False):
                         # After capturing Password, ensure URL is properly formatted
                         
                         # Create a properly escaped credential
-                        # Escape URL part to ensure it's treated as a single field
                         if password_info['USER'] and password_info['PASS'] and password_info['URL']:
-                            file_credentials.append((
-                                password_info['USER'], 
-                                password_info['PASS'], 
-                                f'"{password_info["URL"]}"' if ',' in password_info['URL'] else password_info['URL']
-                            ))
+                            file_credentials.append({
+                                "email": password_info['USER'],
+                                "password": password_info['PASS'],
+                                "source_file": file_path,
+                                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                "type": "password"
+                            })
                         
                         password_info = {'URL': '', 'USER': '', 'PASS': ''}  # Reset for next credential set
                         expected_next = 'URL'  # Start expecting a URL again for the next set
-                        
+
         return file_credentials
     except IOError as e:
         print(f"Error processing file {file_path}: {e}")
@@ -195,3 +195,11 @@ def combine_password_files(output_files, output_folder, output_file_name, verbos
     except Exception as e:
         if verbose:
             print(f"Failed to remove temp folder: {e}")
+
+def send_to_opensearch(credentials):
+    client = OpenSearchClient()
+    for credential in credentials:
+        try:
+            client.index_document(credential)
+        except Exception as e:
+            print(f"Failed to send document to OpenSearch: {e}")

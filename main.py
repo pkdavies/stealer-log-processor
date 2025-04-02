@@ -31,18 +31,20 @@ def main(root_folder, output_folder, verbose, max_workers=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Stealer Log Processor')
-    parser.add_argument('root_folder', type=str, help='The root folder path to process.')
-    parser.add_argument('--output', type=str, help='Output folder for processed files. Defaults to root folder if not specified.')
+    parser.add_argument('root_folder', type=str, nargs='?', default='./data', 
+                        help='The root folder path to process. Defaults to ./data.')
+    parser.add_argument('--output', type=str, default='./output', 
+                        help='Output folder for processed files. Defaults to ./output.')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output.')
     parser.add_argument('--workers', type=int, default=None,
-                       help='Maximum number of worker processes. Default is CPU count.')
+                        help='Maximum number of worker processes. Default is CPU count.')
     args = parser.parse_args()
 
     if not os.path.isdir(args.root_folder):
         print(f"Error: {args.root_folder} is not a valid directory.")
         sys.exit(1)
 
-    # Default output to root_folder if not specified
-    output_folder = args.output if args.output else args.root_folder
+    # Default output to ./output if not specified
+    output_folder = args.output
 
     main(args.root_folder, output_folder, args.verbose, args.workers)
