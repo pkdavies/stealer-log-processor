@@ -2,8 +2,9 @@ import os
 import concurrent.futures
 from opensearch_client import OpenSearchClient
 import datetime
+import csv  # Add import for CSV writing
 
-def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, verbose=False):
+def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, verbose=False, enable_opensearch=False):
     print(f"Processing autofills in folder: {root_folder}")
 
     # Traverse all subdirectories to find autofill files
@@ -41,6 +42,10 @@ def process_autofills_in_folder(root_folder, output_folder, autofill_file_name, 
     # Write autofill data to the output file
     write_autofill_data(autofill_data, output_folder, autofill_file_name, verbose)
 
+    # Send autofill data to OpenSearch if enabled
+    if enable_opensearch:
+        send_to_opensearch(autofill_data)
+
 def process_autofill_files_parallel(file_path, verbose=False):
     if verbose:
         print(f"Processing {file_path}")
@@ -67,9 +72,9 @@ def process_autofill_files_parallel(file_path, verbose=False):
                     current_value = decoded_line.split(':', 1)[1].strip()
                     # Maintain key-value relationship
                     autofill_entries.append({
-                        "email": current_key if "email" in current_key.lower() else None,
-                        "password": current_value if "password" in current_key.lower() else None,
-                        "source_file": file_path,
+                        "key": current_key,
+                        "value": current_value,
+                        "source_file": os.path.basename(file_path),  # Use only the filename
                         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "type": "autofill"
                     })
@@ -96,12 +101,27 @@ def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbos
 
     target_file_path = os.path.join(output_folder, autofill_file_name)
     try:
-        with open(target_file_path, 'w', encoding='utf-8') as target_file:
+        # Write autofill data to a CSV file
+        with open(target_file_path, 'w', encoding='utf-8', newline='') as target_file:
+            csv_writer = csv.DictWriter(target_file, fieldnames=["key", "value", "source_file", "timestamp"])
+            csv_writer.writeheader()
             for entry in autofill_data:
-                # Write each key-value pair as a JSON-like structure for context
-                target_file.write(f"{entry['key']}: {entry['value']}\n")
+                csv_writer.writerow({
+                    "key": entry["key"],
+                    "value": entry["value"],
+                    "source_file": entry["source_file"],  # Use only the filename
+                    "timestamp": entry["timestamp"]
+                })
         if verbose:
             print(f"Wrote autofill data to: {target_file_path}")
     except IOError as e:
         if verbose:
             print(f"Error writing to file {target_file_path}: {e}")
+
+def send_to_opensearch(data):
+    client = OpenSearchClient()
+    for entry in data:
+        try:
+            client.index_document(entry)
+        except Exception as e:
+            print(f"Failed to send document to OpenSearch: {e}")

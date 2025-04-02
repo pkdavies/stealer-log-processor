@@ -4,7 +4,7 @@ import concurrent.futures
 import datetime
 from opensearch_client import OpenSearchClient
 
-def process_passwords_in_folder(root_folder, output_folder, password_file_name, verbose=False, max_workers=None):
+def process_passwords_in_folder(root_folder, output_folder, password_file_name, verbose=False, max_workers=None, enable_opensearch=False):
     print(f"Processing passwords in folder: {root_folder}")
 
     # Initialize list to store paths of output files in subfolders
@@ -17,7 +17,7 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Map subfolder processing to executor
         future_to_subfolder = {
-            executor.submit(process_passwords_in_subfolder, subfolder, output_folder, password_file_name, verbose): subfolder
+            executor.submit(process_passwords_in_subfolder, subfolder, output_folder, password_file_name, verbose, enable_opensearch): subfolder
             for subfolder in subfolders
         }
         
@@ -36,7 +36,7 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
     # Combine all output files into one at output_folder level
     combine_password_files(output_files, output_folder, password_file_name, verbose)
 
-def process_passwords_in_subfolder(subfolder, output_folder, password_file_name, verbose=False):
+def process_passwords_in_subfolder(subfolder, output_folder, password_file_name, verbose=False, enable_opensearch=False):
     if verbose:
         print(f"\tsubfolder: {subfolder}")
 
@@ -77,8 +77,9 @@ def process_passwords_in_subfolder(subfolder, output_folder, password_file_name,
         for credential in credentials:
             out_file.write(','.join(credential.values()) + '\n')
 
-    # Send credentials to OpenSearch
-    send_to_opensearch(credentials)
+    # Send credentials to OpenSearch if enabled
+    if enable_opensearch:
+        send_to_opensearch(credentials)
 
     return output_file_path
 

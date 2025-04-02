@@ -6,7 +6,7 @@ import concurrent.futures
 from processes.password_process import process_passwords_in_folder
 from processes.autofill_process import process_autofills_in_folder
 
-def main(root_folder, output_folder, verbose, max_workers=None):
+def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearch=False):
     # Create output folder if it doesn't exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -16,8 +16,8 @@ def main(root_folder, output_folder, verbose, max_workers=None):
     # Use a shared ProcessPoolExecutor for both tasks
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(process_passwords_in_folder, root_folder, output_folder, 'credentials.csv', verbose),
-            executor.submit(process_autofills_in_folder, root_folder, output_folder, 'autofills.csv', verbose)
+            executor.submit(process_passwords_in_folder, root_folder, output_folder, 'credentials.csv', verbose, enable_opensearch),
+            executor.submit(process_autofills_in_folder, root_folder, output_folder, 'autofills.csv', verbose, enable_opensearch)
         ]
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -38,6 +38,8 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output.')
     parser.add_argument('--workers', type=int, default=None,
                         help='Maximum number of worker processes. Default is CPU count.')
+    parser.add_argument('--enable-opensearch', action='store_true', 
+                        help='Enable OpenSearch integration. Disabled by default.')
     args = parser.parse_args()
 
     if not os.path.isdir(args.root_folder):
@@ -47,4 +49,4 @@ if __name__ == "__main__":
     # Default output to ./output if not specified
     output_folder = args.output
 
-    main(args.root_folder, output_folder, args.verbose, args.workers)
+    main(args.root_folder, output_folder, args.verbose, args.workers, args.enable_opensearch)
