@@ -8,6 +8,7 @@ services:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - plugins.security.disabled=true
     ulimits:
       memlock:
         soft: -1
@@ -21,7 +22,8 @@ services:
     image: opensearchproject/opensearch-dashboards:2.9.0
     container_name: stealerlogs-opensearch-dashboards
     environment:
-      - OPENSEARCH_HOSTS=http://opensearch:9200
+      - OPENSEARCH_HOSTS=http://stealerlogs-opensearch:9200
+      - OPENSEARCH_SSL_VERIFICATION_MODE=none
     ports:
       - "5601:5601"
     networks:
