@@ -143,7 +143,7 @@ def send_to_opensearch(data):
     Args:
         data (list[dict]): List of autofill entries to send.
     """
-    client = OpenSearchClient()
+    client = OpenSearchClient(verbose=False)
     for entry in data:
         try:
             client.index_document(entry)

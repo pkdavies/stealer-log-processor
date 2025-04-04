@@ -6,7 +6,7 @@ import concurrent.futures
 from processes.password_process import process_passwords_in_folder
 from processes.autofill_process import process_autofills_in_folder
 
-def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearch=False, save_csv=True):
+def main(root_folder, output_folder, verbose, max_workers=0, enable_opensearch=False, save_csv=True):
     """
     Main function to process stealer logs.
 
@@ -18,21 +18,34 @@ def main(root_folder, output_folder, verbose, max_workers=None, enable_opensearc
         enable_opensearch (bool): Whether to send data to OpenSearch.
         save_csv (bool): Whether to save extracted data to CSV files.
     """
+
+    max_workers = int(max_workers)
+    if max_workers == 0:
+        max_workers = os.cpu_count() or 2
+
+    if max_workers <= 0:
+        raise ValueError("the max_workers value must be greater than 0")  # Ensure max_workers is valid
+
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     start_time = time.time()
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(process_passwords_in_folder, root_folder, output_folder, 'credentials.csv', verbose, enable_opensearch, save_csv),
-            executor.submit(process_autofills_in_folder, root_folder, output_folder, 'autofills.csv', verbose, enable_opensearch, save_csv)
-        ]
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                print(f"Error during processing: {str(e)}")
+    try:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(process_passwords_in_folder, root_folder, output_folder, 'credentials.csv', verbose, max_workers, enable_opensearch, save_csv),
+                executor.submit(process_autofills_in_folder, root_folder, output_folder, 'autofills.csv', verbose, enable_opensearch, save_csv)
+            ]
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Error during processing: {str(e)}")
+
+    except Exception as outer_e:
+        print(f"Error during setup of ProcessPoolExecutor: {str(outer_e)}")                    
 
     if verbose:
         elapsed = time.time() - start_time
@@ -45,7 +58,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', type=str, default='./output', 
                         help='Output folder for processed files. Defaults to ./output.')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output.')
-    parser.add_argument('--workers', type=int, default=None,
+    parser.add_argument('--workers', type=int, default=0,
                         help='Maximum number of worker processes. Default is CPU count.')
     parser.add_argument('--enable-opensearch', action='store_true', 
                         help='Enable OpenSearch integration. Disabled by default.')

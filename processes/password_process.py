@@ -23,7 +23,8 @@ def process_passwords_in_folder(root_folder, output_folder, password_file_name, 
     output_files = []
 
     # Use ProcessPoolExecutor for CPU-bound tasks
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+    #with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_subfolder = {
             executor.submit(process_passwords_in_subfolder, subfolder, output_folder, password_file_name, verbose, enable_opensearch, save_csv): subfolder
             for subfolder in subfolders
@@ -218,7 +219,7 @@ def send_to_opensearch(credentials):
     Args:
         credentials (list[dict]): List of credentials to send.
     """
-    client = OpenSearchClient()
+    client = OpenSearchClient(verbose=False)
     for credential in credentials:
         try:
             client.index_document(credential)

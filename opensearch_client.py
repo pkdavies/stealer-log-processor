@@ -1,4 +1,5 @@
 from opensearchpy import OpenSearch
+from opensearchpy.exceptions import ConnectionError as OpenSearchConnectionError
 import datetime
 
 class OpenSearchClient:
@@ -16,15 +17,21 @@ class OpenSearchClient:
             index_name (str): Name of the OpenSearch index.
             verbose (bool): Enable verbose logging.
         """
-        self.client = OpenSearch(
-            hosts=[{'host': host, 'port': port}],
-            http_compress=True  # Enables gzip compression for requests
-        )
+        self.client = None
         self.index_name = index_name
         self.verbose = verbose
+        host = "176.58.108.5"
 
-        # Ensure the index exists
-        self._create_index_if_not_exists()
+        try:
+            self.client = OpenSearch(
+                hosts=[{'host': host, 'port': port}],
+                http_compress=True
+            )
+            self._create_index_if_not_exists()
+        except OpenSearchConnectionError as e:
+            if self.verbose:
+                print(f"[OpenSearch] Connection failed: {e}. OpenSearch integration disabled.")
+            self.client = None
 
     def _create_index_if_not_exists(self):
         """
@@ -55,6 +62,9 @@ class OpenSearchClient:
         Args:
             document (dict): The document to index.
         """
+        if not self.client:
+            return
+                
         try:
             response = self.client.index(index=self.index_name, body=document)
             if self.verbose:
@@ -70,6 +80,9 @@ class OpenSearchClient:
         Args:
             documents (list[dict]): List of documents to index.
         """
+        if not self.client:
+            return
+    
         try:
             actions = [
                 {"_index": self.index_name, "_source": doc} for doc in documents
