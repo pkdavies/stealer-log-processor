@@ -231,5 +231,5 @@ def send_to_opensearch(credentials):
     if not credentials:
         return
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         executor.map(index_document_threadsafe, credentials)
