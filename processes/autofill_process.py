@@ -136,16 +136,23 @@ def write_autofill_data(autofill_data, output_folder, autofill_file_name, verbos
         if verbose:
             print(f"Error writing to file {target_file_path}: {e}")
 
-def send_to_opensearch(data):
+def index_document_threadsafe(credential):
+    from opensearch_client import OpenSearchClient
+    client = OpenSearchClient(verbose=False)
+    try:
+        client.index_document(credential)
+    except Exception as e:
+        print(f"Failed to send document to OpenSearch: {e}")
+
+def send_to_opensearch(credentials):
     """
-    Send extracted autofill data to OpenSearch.
+    Send extracted credentials to OpenSearch.
 
     Args:
-        data (list[dict]): List of autofill entries to send.
+        credentials (list[dict]): List of credentials to send.
     """
-    client = OpenSearchClient(verbose=False)
-    for entry in data:
-        try:
-            client.index_document(entry)
-        except Exception as e:
-            print(f"Failed to send document to OpenSearch: {e}")
+    if not credentials:
+        return
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        executor.map(index_document_threadsafe, credentials)
